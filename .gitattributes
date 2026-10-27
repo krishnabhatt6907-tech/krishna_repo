@@ -1,2 +1,708 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+#include <iostream>
+#include <string>
+#include <vector>
+#include <queue>
+#include <climits>
+#include <fstream>
+#include <limits>
+
+using namespace std;
+
+const int INF = INT_MAX / 4;
+
+// =====================================================
+// MEMBER 1: EMERGENCY MANAGEMENT AND PRIORITY QUEUE
+// =====================================================
+
+struct Emergency {
+    int id;
+    string victimName;
+    string location;
+    int priority;           // 3 = High, 2 = Medium, 1 = Low
+    string requiredType;
+    int sequence;
+};
+
+struct EmergencyCompare {
+    bool operator()(const Emergency& a,
+                    const Emergency& b) const {
+
+        // Higher priority is processed first.
+        if (a.priority != b.priority) {
+            return a.priority < b.priority;
+        }
+
+        // For equal priorities, earlier emergency first.
+        return a.sequence > b.sequence;
+    }
+};
+
+class EmergencyManager {
+private:
+    priority_queue<Emergency,
+                   vector<Emergency>,
+                   EmergencyCompare> emergencies;
+
+    int nextId = 1;
+    int nextSequence = 1;
+
+public:
+    void addEmergency() {
+        Emergency e;
+
+        e.id = nextId++;
+
+        cout << "Enter victim name: ";
+        getline(cin >> ws, e.victimName);
+
+        cout << "Enter emergency location: ";
+        getline(cin >> ws, e.location);
+
+        cout << "Priority (3=High, 2=Medium, 1=Low): ";
+        cin >> e.priority;
+
+        if (e.priority < 1 || e.priority > 3) {
+            cout << "Invalid priority!\n";
+            nextId--;
+            return;
+        }
+
+        cout << "Required resource "
+             << "(Ambulance/Medical/Rescue): ";
+
+        cin >> e.requiredType;
+
+        e.sequence = nextSequence++;
+
+        emergencies.push(e);
+
+        // Basic file handling.
+        ofstream file("emergencies.txt", ios::app);
+
+        if (file.is_open()) {
+            file << e.id << ","
+                 << e.victimName << ","
+                 << e.location << ","
+                 << e.priority << ","
+                 << e.requiredType << "\n";
+
+            file.close();
+        }
+
+        cout << "Emergency registered successfully!\n";
+        cout << "Emergency ID: " << e.id << "\n";
+    }
+
+    bool getNextEmergency(Emergency& e) {
+        if (emergencies.empty()) {
+            return false;
+        }
+
+        e = emergencies.top();
+        return true;
+    }
+
+    void removeNextEmergency() {
+        if (!emergencies.empty()) {
+            emergencies.pop();
+        }
+    }
+
+    void displayEmergencies() {
+        if (emergencies.empty()) {
+            cout << "No pending emergencies.\n";
+            return;
+        }
+
+        // Copy so displaying does not change the original queue.
+        auto temp = emergencies;
+
+        cout << "\n--- Pending Emergencies ---\n";
+
+        while (!temp.empty()) {
+            Emergency e = temp.top();
+            temp.pop();
+
+            cout << "ID: " << e.id
+                 << " | Victim: " << e.victimName
+                 << " | Location: " << e.location
+                 << " | Priority: " << e.priority
+                 << " | Required: " << e.requiredType
+                 << "\n";
+        }
+    }
+};
+
+
+// =====================================================
+// MEMBER 3: GRAPH AND DIJKSTRA'S SHORTEST PATH
+// =====================================================
+
+class Graph {
+private:
+    static const int MAX = 20;
+
+    string locations[MAX];
+    int distance[MAX][MAX];
+    int count;
+
+public:
+    Graph() {
+        count = 0;
+
+        for (int i = 0; i < MAX; i++) {
+            for (int j = 0; j < MAX; j++) {
+                distance[i][j] = (i == j) ? 0 : INF;
+            }
+        }
+    }
+
+    int findLocation(string name) {
+        for (int i = 0; i < count; i++) {
+            if (locations[i] == name) {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    void addLocation() {
+        if (count == MAX) {
+            cout << "Maximum locations reached.\n";
+            return;
+        }
+
+        string name;
+
+        cout << "Enter location name: ";
+        getline(cin >> ws, name);
+
+        if (name.empty() || findLocation(name) != -1) {
+            cout << "Invalid or duplicate location.\n";
+            return;
+        }
+
+        locations[count] = name;
+        count++;
+
+        cout << "Location added successfully.\n";
+    }
+
+    void displayLocations() {
+        cout << "\n--- Locations ---\n";
+
+        if (count == 0) {
+            cout << "No locations added.\n";
+            return;
+        }
+
+        for (int i = 0; i < count; i++) {
+            cout << i << " : " << locations[i] << "\n";
+        }
+    }
+
+    void addRoad() {
+        string source, destination;
+        int weight;
+
+        cout << "Enter starting location: ";
+        getline(cin >> ws, source);
+
+        cout << "Enter destination location: ";
+        getline(cin >> ws, destination);
+
+        int u = findLocation(source);
+        int v = findLocation(destination);
+
+        if (u == -1 || v == -1 || u == v) {
+            cout << "Invalid locations.\n";
+            return;
+        }
+
+        cout << "Enter road distance: ";
+        cin >> weight;
+
+        if (weight <= 0) {
+            cout << "Distance must be positive.\n";
+            return;
+        }
+
+        // Undirected weighted graph.
+        distance[u][v] = weight;
+        distance[v][u] = weight;
+
+        cout << "Road added successfully.\n";
+    }
+
+    vector<int> shortestDistances(string source) {
+        vector<int> dist(count, INF);
+        vector<bool> visited(count, false);
+
+        int start = findLocation(source);
+
+        if (start == -1) {
+            cout << "Source location not found.\n";
+            return {};
+        }
+
+        dist[start] = 0;
+
+        for (int i = 0; i < count; i++) {
+            int u = -1;
+
+            // Find the nearest unvisited location.
+            for (int j = 0; j < count; j++) {
+                if (!visited[j] &&
+                    (u == -1 || dist[j] < dist[u])) {
+                    u = j;
+                }
+            }
+
+            if (u == -1 || dist[u] == INF) {
+                break;
+            }
+
+            visited[u] = true;
+
+            // Update distances to neighboring locations.
+            for (int v = 0; v < count; v++) {
+                if (distance[u][v] != INF &&
+                    dist[u] <= INF - distance[u][v] &&
+                    dist[u] + distance[u][v] < dist[v]) {
+
+                    dist[v] = dist[u] + distance[u][v];
+                }
+            }
+        }
+
+        return dist;
+    }
+
+    void displayShortestDistances() {
+        string source;
+
+        cout << "Enter source location: ";
+        getline(cin >> ws, source);
+
+        vector<int> dist = shortestDistances(source);
+
+        if (dist.empty()) {
+            return;
+        }
+
+        cout << "\n--- Shortest Distances ---\n";
+
+        for (int i = 0; i < count; i++) {
+            cout << source << " -> " << locations[i] << " : ";
+
+            if (dist[i] == INF) {
+                cout << "Unreachable";
+            } else {
+                cout << dist[i];
+            }
+
+            cout << "\n";
+        }
+    }
+};
+
+
+// =====================================================
+// MEMBER 2: RESOURCE MANAGEMENT USING LINKED LIST
+// =====================================================
+
+class Resource {
+protected:
+    int id;
+    string name;
+    string location;
+    bool available;
+
+public:
+    Resource(int i, string n, string loc) {
+        id = i;
+        name = n;
+        location = loc;
+        available = true;
+    }
+
+    virtual string getType() const = 0;
+
+    int getId() const {
+        return id;
+    }
+
+    string getName() const {
+        return name;
+    }
+
+    string getLocation() const {
+        return location;
+    }
+
+    bool isAvailable() const {
+        return available;
+    }
+
+    void setAvailable(bool value) {
+        available = value;
+    }
+
+    virtual ~Resource() {}
+};
+
+class Ambulance : public Resource {
+public:
+    Ambulance(int i, string n, string loc)
+        : Resource(i, n, loc) {}
+
+    string getType() const override {
+        return "Ambulance";
+    }
+};
+
+class MedicalTeam : public Resource {
+public:
+    MedicalTeam(int i, string n, string loc)
+        : Resource(i, n, loc) {}
+
+    string getType() const override {
+        return "Medical";
+    }
+};
+
+class RescueTeam : public Resource {
+public:
+    RescueTeam(int i, string n, string loc)
+        : Resource(i, n, loc) {}
+
+    string getType() const override {
+        return "Rescue";
+    }
+};
+
+struct ResourceNode {
+    Resource* data;
+    ResourceNode* next;
+
+    ResourceNode(Resource* r) {
+        data = r;
+        next = nullptr;
+    }
+};
+
+class ResourceManager {
+private:
+    ResourceNode* head;
+    int nextResourceId;
+
+public:
+    ResourceManager() {
+        head = nullptr;
+        nextResourceId = 1;
+    }
+
+    ~ResourceManager() {
+        while (head != nullptr) {
+            ResourceNode* temp = head;
+            head = head->next;
+
+            delete temp->data;
+            delete temp;
+        }
+    }
+
+    void addResource() {
+        string name, location, type;
+
+        cout << "Enter resource name: ";
+        getline(cin >> ws, name);
+
+        cout << "Enter resource location: ";
+        getline(cin >> ws, location);
+
+        cout << "Resource type "
+             << "(Ambulance/Medical/Rescue): ";
+
+        cin >> type;
+
+        Resource* r = nullptr;
+        int id = nextResourceId;
+
+        if (type == "Ambulance") {
+            r = new Ambulance(id, name, location);
+        } else if (type == "Medical") {
+            r = new MedicalTeam(id, name, location);
+        } else if (type == "Rescue") {
+            r = new RescueTeam(id, name, location);
+        } else {
+            cout << "Invalid resource type.\n";
+            return;
+        }
+
+        ResourceNode* newNode = new ResourceNode(r);
+
+        // Insert at the beginning of the linked list.
+        newNode->next = head;
+        head = newNode;
+
+        nextResourceId++;
+
+        ofstream file("resources.txt", ios::app);
+
+        if (file.is_open()) {
+            file << r->getId() << ","
+                 << r->getName() << ","
+                 << r->getLocation() << ","
+                 << r->getType() << "\n";
+
+            file.close();
+        }
+
+        cout << "Resource added successfully. ID: "
+             << r->getId() << "\n";
+    }
+
+    void displayResources() {
+        ResourceNode* current = head;
+
+        if (current == nullptr) {
+            cout << "No resources registered.\n";
+            return;
+        }
+
+        cout << "\n--- Resources ---\n";
+
+        while (current != nullptr) {
+            Resource* r = current->data;
+
+            cout << "ID: " << r->getId()
+                 << " | Name: " << r->getName()
+                 << " | Type: " << r->getType()
+                 << " | Location: " << r->getLocation()
+                 << " | Status: "
+                 << (r->isAvailable() ? "Available" : "Allocated")
+                 << "\n";
+
+            current = current->next;
+        }
+    }
+
+    // Select the nearest available resource of the required type.
+    bool allocateResource(const Emergency& e, Graph& graph) {
+        vector<int> dist = graph.shortestDistances(e.location);
+
+        if (dist.empty()) {
+            cout << "Cannot calculate route from emergency location.\n";
+            return false;
+        }
+
+        ResourceNode* current = head;
+        Resource* best = nullptr;
+        int bestDistance = INF;
+
+        while (current != nullptr) {
+            Resource* r = current->data;
+
+            if (r->isAvailable() &&
+                r->getType() == e.requiredType) {
+
+                // A resource must exist on the graph.
+                int locationIndex = -1;
+
+                // shortestDistances returns distances in graph order.
+                // Find the resource's distance using its location.
+                // The graph validates the location through findLocation
+                // indirectly by the following distance lookup helper.
+                // We use the public shortestDistances method below
+                // for the resource location to determine connectivity.
+                vector<int> fromResource =
+                    graph.shortestDistances(r->getLocation());
+
+                if (fromResource.empty()) {
+                    current = current->next;
+                    continue;
+                }
+
+                // Find distance from emergency to resource by using
+                // the source's computed distance vector.
+                // The Graph exposes the location index in the helper
+                // added in the next method.
+                locationIndex = graph.findLocation(r->getLocation());
+
+                if (locationIndex >= 0 &&
+                    locationIndex < (int)dist.size() &&
+                    dist[locationIndex] < bestDistance) {
+
+                    bestDistance = dist[locationIndex];
+                    best = r;
+                }
+            }
+
+            current = current->next;
+        }
+
+        if (best == nullptr || bestDistance == INF) {
+            cout << "No reachable, available matching resource found.\n";
+            return false;
+        }
+
+        best->setAvailable(false);
+
+        cout << "\nResource allocated successfully!\n";
+        cout << "Victim: " << e.victimName << "\n";
+        cout << "Resource: " << best->getName() << "\n";
+        cout << "Type: " << best->getType() << "\n";
+        cout << "Resource location: " << best->getLocation() << "\n";
+        cout << "Shortest distance: " << bestDistance << "\n";
+
+        ofstream history("allocation_history.txt", ios::app);
+
+        if (history.is_open()) {
+            history << "Emergency ID: " << e.id
+                    << ", Resource ID: " << best->getId()
+                    << ", Distance: " << bestDistance << "\n";
+
+            history.close();
+        }
+
+        return true;
+    }
+
+    void releaseResource() {
+        int id;
+
+        cout << "Enter resource ID to release: ";
+        cin >> id;
+
+        ResourceNode* current = head;
+
+        while (current != nullptr) {
+            if (current->data->getId() == id) {
+                if (!current->data->isAvailable()) {
+                    current->data->setAvailable(true);
+                    cout << "Resource released successfully.\n";
+                } else {
+                    cout << "Resource is already available.\n";
+                }
+
+                return;
+            }
+
+            current = current->next;
+        }
+
+        cout << "Resource ID not found.\n";
+    }
+};
+
+
+// =====================================================
+// MEMBER 4: INTEGRATION AND MAIN MENU
+// =====================================================
+
+int main() {
+    EmergencyManager emergencyManager;
+    ResourceManager resourceManager;
+    Graph graph;
+
+    int choice;
+
+    do {
+        cout << "\n====================================\n";
+        cout << " EMERGENCY RESOURCE ALLOCATION SYSTEM\n";
+        cout << "====================================\n";
+
+        cout << "1. Register Emergency\n";
+        cout << "2.     Display Pending Emergencies\n";
+        cout << "3. Add Resource\n";
+        cout << "4. Display Resources\n";
+        cout << "5. Add Location\n";
+        cout << "6. Display Locations\n";
+        cout << "7. Add Road\n";
+        cout << "8. Find Shortest Distances\n";
+        cout << "9. Allocate Resource to Highest Priority Emergency\n";
+        cout << "10. Release Resource\n";
+        cout << "0. Exit\n";
+
+        cout << "Enter choice: ";
+
+        if (!(cin >> choice)) {
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            cout << "Please enter a valid menu number.\n";
+            continue;
+        }
+
+        switch (choice) {
+            case 1:
+                emergencyManager.addEmergency();
+                break;
+
+            case 2:
+                emergencyManager.displayEmergencies();
+                break;
+
+            case 3:
+                resourceManager.addResource();
+                break;
+
+            case 4:
+                resourceManager.displayResources();
+                break;
+
+            case 5:
+                graph.addLocation();
+                break;
+
+            case 6:
+                graph.displayLocations();
+                break;
+
+            case 7:
+                graph.addRoad();
+                break;
+
+            case 8:
+                graph.displayShortestDistances();
+                break;
+
+            case 9: {
+                Emergency e;
+
+                if (!emergencyManager.getNextEmergency(e)) {
+                    cout << "No pending emergencies.\n";
+                    break;
+                }
+
+                cout << "\nProcessing highest-priority emergency...\n";
+                cout << "Victim: " << e.victimName << "\n";
+                cout << "Priority: " << e.priority << "\n";
+
+                if (resourceManager.allocateResource(e, graph)) {
+                    emergencyManager.removeNextEmergency();
+                } else {
+                    cout << "Emergency remains pending because "
+                         << "allocation was unsuccessful.\n";
+                }
+
+                break;
+            }
+
+            case 10:
+                resourceManager.releaseResource();
+                break;
+
+            case 0:
+                cout << "Exiting system. Goodbye!\n";
+                break;
+
+            default:
+                cout << "Invalid choice. Try again.\n";
+        }
+
+    } while (choice != 0);
+
+    return 0;
+}
